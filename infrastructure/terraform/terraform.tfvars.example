@@ -1,0 +1,110 @@
+# KYC Onboarding System - Terraform Variables Example
+# Copy this file to terraform.tfvars and customize for your environment
+
+# ========================
+# General Configuration
+# ========================
+
+aws_region   = "us-east-1"
+environment  = "dev"  # dev, staging, prod
+project_name = "kyc"
+
+# ========================
+# Networking
+# ========================
+
+vpc_cidr                 = "10.0.0.0/16"
+availability_zones_count = 3
+enable_nat_gateway       = true
+single_nat_gateway       = true  # Set to false for production (high availability)
+
+# ========================
+# Database Configuration
+# ========================
+
+# Dev/Staging
+db_instance_class        = "db.t3.medium"
+db_allocated_storage     = 50
+db_max_allocated_storage = 200
+db_multi_az              = false
+
+# Production (uncomment for prod)
+# db_instance_class        = "db.r6g.large"
+# db_allocated_storage     = 100
+# db_max_allocated_storage = 500
+# db_multi_az              = true
+
+db_name                    = "kyc_db"
+db_username                = "kyc_admin"
+db_backup_retention_period = 7  # 30 for production
+
+# ========================
+# Redis Configuration
+# ========================
+
+# Dev/Staging
+redis_node_type       = "cache.t3.medium"
+redis_num_cache_nodes = 1
+redis_engine_version  = "7.0"
+
+# Production (uncomment for prod)
+# redis_node_type       = "cache.r6g.large"
+# redis_num_cache_nodes = 3
+
+# ========================
+# S3 Configuration
+# ========================
+
+s3_versioning_enabled     = true
+s3_lifecycle_raw_days     = 90
+s3_lifecycle_archive_days = 2555  # 7 years for compliance
+
+# ========================
+# Lambda Configuration
+# ========================
+
+lambda_memory_size          = 1024
+lambda_timeout              = 300
+lambda_reserved_concurrency = 100  # 1000 for production
+
+# ========================
+# ECS Configuration
+# ========================
+
+ecs_task_cpu     = 512   # 1024 for production
+ecs_task_memory  = 1024  # 2048 for production
+ecs_desired_count = 1    # 3 for production
+ecs_min_capacity  = 1    # 2 for production
+ecs_max_capacity  = 10   # 100 for production
+api_container_port = 3000
+
+# ========================
+# SQS Configuration
+# ========================
+
+sqs_message_retention_seconds  = 1209600  # 14 days
+sqs_visibility_timeout_seconds = 300
+sqs_max_receive_count          = 3
+
+# ========================
+# Scaling Configuration
+# ========================
+
+scaling_target_cpu      = 70
+scaling_target_memory   = 80
+scaling_target_requests = 1000
+
+# ========================
+# Domain & SSL
+# ========================
+
+domain_name        = ""  # e.g., "kyc.example.com"
+create_certificate = false
+
+# ========================
+# Monitoring
+# ========================
+
+enable_enhanced_monitoring = true
+log_retention_days         = 30
+alarm_email                = ""  # e.g., "ops@example.com"

@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: kyc-postgres
+    environment:
+      POSTGRES_USER: kyc_admin
+      POSTGRES_PASSWORD: kyc_password
+      POSTGRES_DB: kyc_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kyc_admin -d kyc_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: kyc-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LocalStack for AWS Services
+  localstack:
+    image: localstack/localstack:latest
+    container_name: kyc-localstack
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=s3,sqs,sns,secretsmanager,kms
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - localstack_data:/tmp/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./infrastructure/localstack:/etc/localstack/init/ready.d
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kyc-backend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://kyc_admin:kyc_password@postgres:5432/kyc_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_ENDPOINT_URL: http://localstack:4566
+      S3_RAW_BUCKET: kyc-raw-documents
+      S3_PROCESSED_BUCKET: kyc-processed-documents
+      SQS_INGESTION_QUEUE_URL: http://localstack:4566/000000000000/kyc-document-ingestion
+      SQS_PROCESSING_QUEUE_URL: http://localstack:4566/000000000000/kyc-document-processing
+      SQS_REVIEW_QUEUE_URL: http://localstack:4566/000000000000/kyc-human-review
+      SNS_STATUS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:kyc-status-updates
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      ENCRYPTION_KEY: dev-encryption-key-32-bytes-long!
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    volumes:
+      - ./backend/src:/app/src
+    command: npm run dev
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kyc-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+    command: npm run dev -- --host
+
+volumes:
+  postgres_data:
+  redis_data:
+  localstack_data:
+
+networks:
+  default:
+    name: kyc-network

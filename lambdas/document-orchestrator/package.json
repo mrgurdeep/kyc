@@ -1,0 +1,22 @@
+{
+  "name": "document-orchestrator",
+  "version": "1.0.0",
+  "description": "Lambda function to orchestrate document processing with Textract and Rekognition",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "package": "npm run build && cd dist && zip -r ../function.zip .",
+    "deploy": "npm run package && aws lambda update-function-code --function-name kyc-document-orchestrator --zip-file fileb://function.zip"
+  },
+  "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.500.0",
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/client-sqs": "^3.500.0",
+    "@aws-sdk/client-textract": "^3.500.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.131",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  }
+}

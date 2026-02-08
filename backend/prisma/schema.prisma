@@ -1,0 +1,119 @@
+// KYC Onboarding System - Prisma Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  role         String   @default("user") // user, reviewer, admin
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  submissions   KycSubmission[]   @relation("UserSubmissions")
+  reviewedItems KycSubmission[]   @relation("ReviewedSubmissions")
+  assignedQueue ReviewQueue[]     @relation("AssignedReviews")
+  auditActions  AuditLog[]        @relation("AuditActor")
+
+  @@map("users")
+}
+
+// KYC Submission model
+model KycSubmission {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  status          String    @default("pending") // pending_upload, pending, processing, review, approved, rejected
+  documentType    String    @map("document_type") // passport, national_id, drivers_license, utility_bill, bank_statement
+  s3Key           String    @map("s3_key")
+  fileName        String    @map("file_name")
+  fileType        String    @map("file_type")
+  fileSize        Int       @map("file_size")
+  rejectionReason String?   @map("rejection_reason")
+  reviewedBy      String?   @map("reviewed_by")
+  textractJobId   String?   @map("textract_job_id")
+  uploadedAt      DateTime? @map("uploaded_at")
+  processedAt     DateTime? @map("processed_at")
+  reviewedAt      DateTime? @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user          User            @relation("UserSubmissions", fields: [userId], references: [id])
+  reviewer      User?           @relation("ReviewedSubmissions", fields: [reviewedBy], references: [id])
+  extractedData ExtractedData[]
+  reviewQueue   ReviewQueue?
+  auditLogs     AuditLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([documentType])
+  @@index([createdAt])
+  @@map("kyc_submissions")
+}
+
+// Extracted Data model (encrypted PII)
+model ExtractedData {
+  id              String   @id @default(uuid())
+  submissionId    String   @map("submission_id")
+  fieldName       String   @map("field_name") // full_name, date_of_birth, passport_number, address, etc.
+  encryptedValue  String   @map("encrypted_value") // AES-256 encrypted
+  confidenceScore Float    @map("confidence_score")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  submission KycSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([fieldName])
+  @@map("kyc_extracted_data")
+}
+
+// Review Queue model
+model ReviewQueue {
+  id           String    @id @default(uuid())
+  submissionId String    @unique @map("submission_id")
+  assignedTo   String?   @map("assigned_to")
+  priority     Int       @default(3) // 1-5, higher is more urgent
+  queuedAt     DateTime  @default(now()) @map("queued_at")
+  claimedAt    DateTime? @map("claimed_at")
+
+  // Relations
+  submission KycSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  assignee   User?         @relation("AssignedReviews", fields: [assignedTo], references: [id])
+
+  @@index([assignedTo])
+  @@index([priority])
+  @@index([queuedAt])
+  @@map("review_queue")
+}
+
+// Audit Log model
+model AuditLog {
+  id           String   @id @default(uuid())
+  submissionId String?  @map("submission_id")
+  actorId      String?  @map("actor_id")
+  action       String // upload, processing_started, processing_completed, review_claimed, review_released, review_approve, review_reject
+  details      Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  submission KycSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  actor      User?          @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([submissionId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
