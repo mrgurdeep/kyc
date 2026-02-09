@@ -21,7 +21,7 @@ interface Analytics {
     submissions: number;
     approved: number;
     approvalRate: number;
-    avgProcessingTimeHours: number;
+    avgProcessingTimeHours: number | null;
   };
 }
 
@@ -187,14 +187,16 @@ export default function AdminDashboard() {
             <div>
               <p className="text-sm text-gray-500">Approval Rate</p>
               <p className="text-3xl font-bold text-gray-900">
-                {analytics.last30Days.approvalRate}%
+                {analytics.last30Days.approvalRate ?? 0}%
               </p>
             </div>
 
             <div>
               <p className="text-sm text-gray-500">Avg Processing Time</p>
               <p className="text-3xl font-bold text-gray-900">
-                {analytics.last30Days.avgProcessingTimeHours.toFixed(1)}h
+                {typeof analytics.last30Days.avgProcessingTimeHours === 'number'
+                  ? `${analytics.last30Days.avgProcessingTimeHours.toFixed(1)}h`
+                  : 'N/A'}
               </p>
             </div>
           </div>

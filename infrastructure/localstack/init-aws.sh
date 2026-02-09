@@ -43,6 +43,28 @@ awslocal sns subscribe \
   --protocol sqs \
   --notification-endpoint arn:aws:sqs:us-east-1:000000000000:kyc-notifications
 
+# Configure S3 event notifications to trigger SQS when objects are uploaded
+# This mimics the production setup where S3 → SQS → Lambda
+awslocal s3api put-bucket-notification-configuration \
+  --bucket kyc-raw-documents \
+  --notification-configuration '{
+    "QueueConfigurations": [
+      {
+        "QueueArn": "arn:aws:sqs:us-east-1:000000000000:kyc-document-ingestion",
+        "Events": ["s3:ObjectCreated:*"],
+        "Filter": {
+          "Key": {
+            "FilterRules": [
+              {"Name": "prefix", "Value": "raw/"}
+            ]
+          }
+        }
+      }
+    ]
+  }'
+
+echo "S3 event notification configured for kyc-raw-documents → kyc-document-ingestion queue"
+
 # Create KMS key for encryption
 awslocal kms create-key --description "KYC encryption key"
 

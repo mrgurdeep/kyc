@@ -83,60 +83,185 @@ kyc/
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 18+ (Node.js 20+ recommended)
 - Docker and Docker Compose
-- AWS CLI (for deployment)
+- AWS CLI (for deployment only)
 
-### Local Development
+### Local Development Setup
 
-1. **Clone and install dependencies**:
+#### Step 1: Start Infrastructure Services
 
-```bash
-# Backend
-cd backend
-npm install
-cp .env.example .env
-
-# Frontend
-cd ../frontend
-npm install
-```
-
-2. **Start local services with Docker**:
+Start PostgreSQL, Redis, and LocalStack (local AWS emulator):
 
 ```bash
 docker-compose up -d
 ```
 
-This starts:
-- PostgreSQL (port 5432)
-- Redis (port 6379)
-- LocalStack (AWS services, port 4566)
+Wait for services to be healthy (LocalStack takes ~15-20 seconds to initialize):
 
-3. **Initialize the database**:
+```bash
+docker-compose ps
+```
+
+You should see all services as "healthy".
+
+#### Step 2: Setup Backend
 
 ```bash
 cd backend
-npx prisma migrate dev
+
+# Install dependencies
+npm install
+
+# Copy environment file
+cp .env.example .env
+```
+
+The `.env` file is pre-configured for local development with LocalStack. Key settings:
+- `AWS_ENDPOINT_URL=http://localhost:4566` - Routes AWS calls to LocalStack
+- `DATABASE_URL` - Points to local PostgreSQL
+- `SIMULATE_AI_PROCESSING=true` - Simulates Textract/Rekognition locally
+
+#### Step 3: Initialize Database
+
+```bash
+cd backend
+
+# Run migrations (use --skip-generate if you encounter Prisma binary errors on Apple Silicon)
+npx prisma migrate dev --skip-generate
+
+# Generate Prisma client
 npx prisma generate
 ```
 
-4. **Start the development servers**:
+**Note for Apple Silicon (M1/M2) users**: If you see `BasicBlock` errors during Prisma operations, this is a known issue. Always use `--skip-generate` with migrate and run `npx prisma generate` separately.
+
+#### Step 4: Setup Frontend
 
 ```bash
-# Terminal 1 - Backend
+cd frontend
+
+# Install dependencies
+npm install
+
+# Copy environment file (already configured for local dev)
+cp .env.example .env
+```
+
+#### Step 5: Start Development Servers
+
+Open two terminal windows:
+
+**Terminal 1 - Backend:**
+```bash
 cd backend
 npm run dev
+```
 
-# Terminal 2 - Frontend
+You should see:
+```
+Server running on port 3000
+WebSocket server running on ws://0.0.0.0:3000/ws
+Document processor worker started (local development mode)
+Redis connected
+```
+
+**Terminal 2 - Frontend:**
+```bash
 cd frontend
 npm run dev
 ```
 
-5. **Access the application**:
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:3000
-- API Health: http://localhost:3000/health
+#### Step 6: Create a Test User
+
+The application is now running! Open http://localhost:5173 and register a new account.
+
+**To create an admin user:**
+
+```bash
+# Option 1: Promote an existing user to admin
+docker exec kyc-postgres psql -U kyc_admin -d kyc_db -c "UPDATE users SET role = 'admin' WHERE email = 'your@email.com';"
+
+# Option 2: Use the admin creation script
+cd backend
+npx tsx scripts/createAdmin.ts admin@example.com YourPassword123! Admin User
+```
+
+**Important**: After changing a user's role, you must log out and log back in to get a new JWT token with the updated role.
+
+#### Step 7: Test the Full Flow
+
+1. **Register/Login** as a regular user at http://localhost:5173
+2. **Upload a document** (passport, ID, etc.) - supports PNG, JPG, PDF
+3. **Watch the status change** automatically:
+   - `pending_upload` → `processing` → `pending_review`
+4. **Login as admin** to review submissions at `/admin`
+5. **Approve or reject** documents from the review queue
+
+### Access Points
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:3000 |
+| API Health Check | http://localhost:3000/health |
+| LocalStack | http://localhost:4566 |
+| PostgreSQL | localhost:5432 |
+| Redis | localhost:6379 |
+
+### Useful Commands
+
+```bash
+# View backend logs
+docker-compose logs -f backend
+
+# View all container logs
+docker-compose logs -f
+
+# Check LocalStack resources
+aws --endpoint-url=http://localhost:4566 s3 ls
+aws --endpoint-url=http://localhost:4566 sqs list-queues
+
+# Access PostgreSQL directly
+docker exec -it kyc-postgres psql -U kyc_admin -d kyc_db
+
+# Reset everything (removes all data)
+docker-compose down -v
+docker-compose up -d
+
+# Rebuild after code changes
+docker-compose up -d --build
+```
+
+### Troubleshooting
+
+**WebSocket connection fails:**
+- Restart the frontend dev server (`Ctrl+C` then `npm run dev`)
+- Check that the backend is running on port 3000
+
+**Database connection errors:**
+- Verify Docker containers are running: `docker-compose ps`
+- Check DATABASE_URL in `backend/.env` matches docker-compose credentials
+
+**LocalStack errors ("Device or resource busy"):**
+```bash
+docker-compose down -v
+docker volume prune -f
+docker-compose up -d
+```
+
+**Prisma "BasicBlock" errors (Apple Silicon):**
+```bash
+cd backend
+rm -rf node_modules/.prisma node_modules/@prisma/engines
+npm install prisma@5.22.0 @prisma/client@5.22.0
+npx prisma generate
+```
+
+**Documents stuck in "pending" status:**
+- Check that `SIMULATE_AI_PROCESSING=true` is set in `backend/.env`
+- Verify the document processor worker is running (check backend logs)
+- Check LocalStack S3 notifications: `docker logs kyc-localstack`
 
 ## API Endpoints
 

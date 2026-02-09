@@ -14,14 +14,16 @@ import clsx from 'clsx';
 import { useAuthStore } from '../store/authStore';
 import { wsService } from '../services/websocket';
 
+// Navigation for regular users
 const userNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Upload Documents', href: '/upload', icon: DocumentArrowUpIcon },
   { name: 'Status', href: '/status', icon: ClockIcon },
 ];
 
+// Navigation for admin/reviewer - they only see admin options
 const adminNavigation = [
-  { name: 'Admin Dashboard', href: '/admin', icon: Cog6ToothIcon },
+  { name: 'Dashboard', href: '/admin', icon: HomeIcon },
   { name: 'Review Queue', href: '/admin/queue', icon: QueueListIcon },
 ];
 
@@ -54,53 +56,56 @@ export default function Layout() {
           <div className="flex justify-between h-16">
             {/* Logo */}
             <div className="flex items-center">
-              <Link to="/dashboard" className="flex items-center">
-                <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
+              <Link to={isAdmin ? '/admin' : '/dashboard'} className="flex items-center">
+                <div className={clsx(
+                  'w-8 h-8 rounded-lg flex items-center justify-center',
+                  isAdmin ? 'bg-purple-600' : 'bg-primary-600'
+                )}>
                   <span className="text-white font-bold text-lg">K</span>
                 </div>
                 <span className="ml-2 text-xl font-semibold text-gray-900">
-                  KYC Portal
+                  {isAdmin ? 'KYC Admin' : 'KYC Portal'}
                 </span>
               </Link>
             </div>
 
-            {/* Navigation */}
+            {/* Navigation - show different nav based on role */}
             <nav className="hidden md:flex items-center space-x-1">
-              {userNavigation.map((item) => (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={clsx(
-                    'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                    location.pathname === item.href
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  )}
-                >
-                  <item.icon className="w-5 h-5 inline-block mr-1" />
-                  {item.name}
-                </Link>
-              ))}
-
-              {isAdmin && (
-                <>
-                  <div className="w-px h-6 bg-gray-300 mx-2" />
-                  {adminNavigation.map((item) => (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={clsx(
-                        'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                        location.pathname.startsWith(item.href)
-                          ? 'bg-purple-50 text-purple-700'
-                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                      )}
-                    >
-                      <item.icon className="w-5 h-5 inline-block mr-1" />
-                      {item.name}
-                    </Link>
-                  ))}
-                </>
+              {isAdmin ? (
+                // Admin/Reviewer navigation
+                adminNavigation.map((item) => (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={clsx(
+                      'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                      location.pathname === item.href || 
+                      (item.href !== '/admin' && location.pathname.startsWith(item.href))
+                        ? 'bg-purple-50 text-purple-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    )}
+                  >
+                    <item.icon className="w-5 h-5 inline-block mr-1" />
+                    {item.name}
+                  </Link>
+                ))
+              ) : (
+                // Regular user navigation
+                userNavigation.map((item) => (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={clsx(
+                      'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                      location.pathname === item.href
+                        ? 'bg-primary-50 text-primary-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    )}
+                  >
+                    <item.icon className="w-5 h-5 inline-block mr-1" />
+                    {item.name}
+                  </Link>
+                ))
               )}
             </nav>
 

@@ -7,17 +7,42 @@ import {
 } from '@aws-sdk/client-sqs';
 import { logger } from '../utils/logger';
 
-const sqsClient = new SQSClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-});
+// Lazy initialization to ensure environment variables are loaded
+let _sqsClient: SQSClient | null = null;
 
-// Queue URLs from environment
-const QUEUES = {
-  ingestion: process.env.SQS_INGESTION_QUEUE_URL || '',
-  processing: process.env.SQS_PROCESSING_QUEUE_URL || '',
-  review: process.env.SQS_REVIEW_QUEUE_URL || '',
-  notifications: process.env.SQS_NOTIFICATIONS_QUEUE_URL || '',
-};
+function getSQSClient(): SQSClient {
+  if (!_sqsClient) {
+    const isLocalStack = process.env.AWS_ENDPOINT_URL || process.env.LOCALSTACK_ENDPOINT;
+    const localStackEndpoint = process.env.AWS_ENDPOINT_URL || process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+
+    _sqsClient = new SQSClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+      ...(isLocalStack && {
+        endpoint: localStackEndpoint,
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'test',
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'test',
+        },
+      }),
+    });
+
+    logger.info('SQS client initialized', { 
+      isLocalStack: !!isLocalStack, 
+      endpoint: isLocalStack ? localStackEndpoint : 'AWS' 
+    });
+  }
+  return _sqsClient;
+}
+
+// Lazy getter for queue URLs
+function getQueues() {
+  return {
+    ingestion: process.env.SQS_INGESTION_QUEUE_URL || '',
+    processing: process.env.SQS_PROCESSING_QUEUE_URL || '',
+    review: process.env.SQS_REVIEW_QUEUE_URL || '',
+    notifications: process.env.SQS_NOTIFICATIONS_QUEUE_URL || '',
+  };
+}
 
 interface DocumentIngestionMessage {
   submissionId: string;
@@ -53,28 +78,28 @@ export const sqsService = {
    * Send message to document ingestion queue
    */
   async sendToIngestionQueue(message: DocumentIngestionMessage): Promise<string> {
-    return this.sendMessage(QUEUES.ingestion, message, 'ingestion');
+    return this.sendMessage(getQueues().ingestion, message, 'ingestion');
   },
 
   /**
    * Send message to document processing queue
    */
   async sendToProcessingQueue(message: DocumentProcessingMessage): Promise<string> {
-    return this.sendMessage(QUEUES.processing, message, 'processing');
+    return this.sendMessage(getQueues().processing, message, 'processing');
   },
 
   /**
    * Send message to human review queue
    */
   async sendToReviewQueue(message: ReviewQueueMessage): Promise<string> {
-    return this.sendMessage(QUEUES.review, message, 'review');
+    return this.sendMessage(getQueues().review, message, 'review');
   },
 
   /**
    * Send message to notifications queue
    */
   async sendToNotificationsQueue(message: NotificationMessage): Promise<string> {
-    return this.sendMessage(QUEUES.notifications, message, 'notification');
+    return this.sendMessage(getQueues().notifications, message, 'notification');
   },
 
   /**
@@ -106,7 +131,7 @@ export const sqsService = {
         },
       });
 
-      const response = await sqsClient.send(command);
+      const response = await getSQSClient().send(command);
 
       logger.debug('Message sent to SQS', {
         queueUrl,
@@ -149,7 +174,7 @@ export const sqsService = {
         AttributeNames: ['All'],
       });
 
-      const response = await sqsClient.send(command);
+      const response = await getSQSClient().send(command);
 
       if (!response.Messages || response.Messages.length === 0) {
         return [];
@@ -182,7 +207,7 @@ export const sqsService = {
         ReceiptHandle: receiptHandle,
       });
 
-      await sqsClient.send(command);
+      await getSQSClient().send(command);
 
       logger.debug('Message deleted from SQS', { queueUrl });
     } catch (error) {
@@ -207,7 +232,7 @@ export const sqsService = {
         ],
       });
 
-      const response = await sqsClient.send(command);
+      const response = await getSQSClient().send(command);
 
       return {
         approximateNumberOfMessages: parseInt(
@@ -224,4 +249,4 @@ export const sqsService = {
   },
 };
 
-export { sqsClient, QUEUES };
+export { getSQSClient as sqsClient, getQueues as QUEUES };

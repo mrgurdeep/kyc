@@ -1,14 +1,40 @@
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { logger } from '../utils/logger';
 
-const snsClient = new SNSClient({
-  region: process.env.AWS_REGION || 'us-east-1',
-});
+// Lazy initialization to ensure environment variables are loaded
+let _snsClient: SNSClient | null = null;
 
-const TOPICS = {
-  statusUpdates: process.env.SNS_STATUS_TOPIC_ARN || '',
-  textractCompletion: process.env.SNS_TEXTRACT_TOPIC_ARN || '',
-};
+function getSNSClient(): SNSClient {
+  if (!_snsClient) {
+    const isLocalStack = process.env.AWS_ENDPOINT_URL || process.env.LOCALSTACK_ENDPOINT;
+    const localStackEndpoint = process.env.AWS_ENDPOINT_URL || process.env.LOCALSTACK_ENDPOINT || 'http://localhost:4566';
+
+    _snsClient = new SNSClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+      ...(isLocalStack && {
+        endpoint: localStackEndpoint,
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID || 'test',
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || 'test',
+        },
+      }),
+    });
+
+    logger.info('SNS client initialized', { 
+      isLocalStack: !!isLocalStack, 
+      endpoint: isLocalStack ? localStackEndpoint : 'AWS' 
+    });
+  }
+  return _snsClient;
+}
+
+// Lazy getter for topic ARNs
+function getTopics() {
+  return {
+    statusUpdates: process.env.SNS_STATUS_TOPIC_ARN || '',
+    textractCompletion: process.env.SNS_TEXTRACT_TOPIC_ARN || '',
+  };
+}
 
 interface StatusUpdateMessage {
   submissionId: string;
@@ -32,7 +58,7 @@ export const snsService = {
    * Publish KYC status update
    */
   async publishStatusUpdate(message: StatusUpdateMessage): Promise<string> {
-    return this.publish(TOPICS.statusUpdates, message, 'KYCStatusUpdate');
+    return this.publish(getTopics().statusUpdates, message, 'KYCStatusUpdate');
   },
 
   /**
@@ -41,7 +67,7 @@ export const snsService = {
   async publishTextractCompletion(
     message: TextractCompletionMessage
   ): Promise<string> {
-    return this.publish(TOPICS.textractCompletion, message, 'TextractCompletion');
+    return this.publish(getTopics().textractCompletion, message, 'TextractCompletion');
   },
 
   /**
@@ -74,7 +100,7 @@ export const snsService = {
         },
       });
 
-      const response = await snsClient.send(command);
+      const response = await getSNSClient().send(command);
 
       logger.debug('Message published to SNS', {
         topicArn,
@@ -111,4 +137,4 @@ export const snsService = {
   },
 };
 
-export { snsClient, TOPICS };
+export { getSNSClient as snsClient, getTopics as TOPICS };

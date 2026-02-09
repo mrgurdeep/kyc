@@ -47,7 +47,7 @@ router.get('/queue', async (req, res, next) => {
         : { OR: [{ assignedTo: null }, { assignedTo: userId }] }),
       ...(priority && { priority }),
       submission: {
-        status: 'review',
+        status: { in: ['review', 'pending_review'] },
         ...(documentType && { documentType }),
       },
     };
@@ -259,13 +259,28 @@ router.get('/:queueId', async (req, res, next) => {
       throw new NotFoundError('Review item');
     }
 
-    // Decrypt extracted data
-    const extractedData = queueItem.submission.extractedData.map((data) => ({
-      id: data.id,
-      fieldName: data.fieldName,
-      value: decrypt(data.encryptedValue),
-      confidenceScore: data.confidenceScore,
-    }));
+    // Decrypt extracted data (handle both encrypted and plain JSON for dev)
+    const extractedData = queueItem.submission.extractedData.map((data) => {
+      let value: any;
+      try {
+        // Try to decrypt (production encrypted data)
+        value = decrypt(data.encryptedValue);
+      } catch {
+        // If decryption fails, assume it's plain JSON (development/simulated data)
+        try {
+          value = JSON.parse(data.encryptedValue);
+        } catch {
+          // If JSON parse fails, use as plain string
+          value = data.encryptedValue;
+        }
+      }
+      return {
+        id: data.id,
+        fieldName: data.fieldName,
+        value,
+        confidenceScore: data.confidenceScore,
+      };
+    });
 
     res.status(200).json({
       success: true,

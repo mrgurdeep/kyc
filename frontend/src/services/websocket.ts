@@ -6,7 +6,7 @@ class WebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private messageHandlers = new Map<string, Set<MessageHandler>>();
   private isConnecting = false;
 
@@ -16,8 +16,27 @@ class WebSocketService {
     }
 
     this.isConnecting = true;
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+    
+    // In development with Vite proxy, use relative path /ws
+    // In production, use full URL from env or derive from API URL
+    let wsUrl: string;
+    
+    if (import.meta.env.DEV) {
+      // Development: Use Vite's proxy
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}/ws`;
+    } else if (import.meta.env.VITE_WS_URL) {
+      // Production with explicit WS URL
+      wsUrl = import.meta.env.VITE_WS_URL;
+    } else {
+      // Production: Derive from API URL
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+      const apiHost = new URL(apiUrl).host;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${apiHost}/ws`;
+    }
 
+    console.log('Connecting to WebSocket:', wsUrl);
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {

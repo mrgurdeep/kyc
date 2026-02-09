@@ -73,7 +73,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleStatusUpdate = (update: KycStatusUpdate) => {
+  const handleStatusUpdate = (_update: KycStatusUpdate) => {
     // Refresh status when we receive an update
     loadStatus();
   };

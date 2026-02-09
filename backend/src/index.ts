@@ -1,3 +1,7 @@
+// Load environment variables FIRST before any other imports
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -5,7 +9,6 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
-import dotenv from 'dotenv';
 
 import { logger } from './utils/logger';
 import { errorHandler } from './api/middleware/errorHandler';
@@ -21,8 +24,8 @@ import healthRoutes from './api/routes/health.routes';
 // WebSocket
 import { setupWebSocket } from './websocket';
 
-// Load environment variables
-dotenv.config();
+// Workers
+import { startDocumentProcessor, stopDocumentProcessor } from './workers/documentProcessor';
 
 const app = express();
 const server = createServer(app);
@@ -86,11 +89,19 @@ server.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`WebSocket server running on ws://0.0.0.0:${PORT}/ws`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Start document processor worker for local development
+  // In production, this is handled by Lambda
+  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_LOCAL_WORKER !== 'false') {
+    startDocumentProcessor();
+    logger.info('Document processor worker started (local development mode)');
+  }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  stopDocumentProcessor();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);
@@ -99,6 +110,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
+  stopDocumentProcessor();
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);

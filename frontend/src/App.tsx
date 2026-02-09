@@ -11,16 +11,23 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import ReviewQueuePage from './pages/admin/ReviewQueuePage';
 import ReviewDetailPage from './pages/admin/ReviewDetailPage';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+// Route for regular users only (not admin/reviewer)
+function UserRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
+  // Redirect admin/reviewer to admin dashboard
+  if (user?.role === 'admin' || user?.role === 'reviewer') {
+    return <Navigate to="/admin" replace />;
+  }
+
   return <>{children}</>;
 }
 
+// Route for admin/reviewer only
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore();
 
@@ -35,6 +42,21 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Smart redirect based on role
+function RoleBasedRedirect() {
+  const { isAuthenticated, user } = useAuthStore();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user?.role === 'admin' || user?.role === 'reviewer') {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return <Navigate to="/dashboard" replace />;
+}
+
 function App() {
   return (
     <Routes>
@@ -44,12 +66,12 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
       </Route>
 
-      {/* Protected user routes */}
+      {/* Protected user routes - regular users only */}
       <Route
         element={
-          <ProtectedRoute>
+          <UserRoute>
             <Layout />
-          </ProtectedRoute>
+          </UserRoute>
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
@@ -58,7 +80,7 @@ function App() {
         <Route path="/status/:submissionId" element={<StatusPage />} />
       </Route>
 
-      {/* Admin routes */}
+      {/* Admin routes - admin/reviewer only */}
       <Route
         path="/admin"
         element={
@@ -72,8 +94,8 @@ function App() {
         <Route path="review/:queueId" element={<ReviewDetailPage />} />
       </Route>
 
-      {/* Redirect root to dashboard or login */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      {/* Smart redirect based on role */}
+      <Route path="/" element={<RoleBasedRedirect />} />
 
       {/* 404 */}
       <Route
